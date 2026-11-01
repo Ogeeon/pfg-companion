@@ -484,3 +484,38 @@ test('Save downloads the same document as a file', async () => {
   const full = await exportFrom('pfg-save', { minified: false });
   assert.strictEqual(full.saved.name, 'pfg-companion-all.json');
 });
+
+const SITE_URL = 'https://proxyforgame.com/en';
+const sitePage = () => '<!DOCTYPE html><html><head></head><body></body></html>';
+
+test('marks the page for the extension to stand down', async () => {
+  let marker = null;
+  await runPage(gamePage(), { afterLoad(w) { marker = w.document.documentElement.dataset.pfgCompanion; } });
+  assert.strictEqual(marker, 'userscript');
+});
+
+test('stands down when the extension has marked the page', async () => {
+  const html = gamePage({ menu: true }).replace('<html>', '<html data-pfg-companion="extension">');
+  const result = await runPage(html);
+  assert.strictEqual(result.fetches, 0);
+  assert.strictEqual(result.writes, 0);
+  assert.strictEqual(result.icon, null, 'no menu entry is added');
+  assert.strictEqual(store[SNAPSHOTS_KEY], undefined);
+});
+
+test('site mode writes the pending export when it is alone', async () => {
+  await runPage(gamePage());
+  let pending = null;
+  await runPage(sitePage(), { url: SITE_URL, afterLoad(w) { pending = JSON.parse(w.localStorage.getItem('pfg_companion_pending_export')); } });
+  assert.strictEqual(pending.version, 1);
+  assert.strictEqual(pending.exports.length, 1);
+  assert.strictEqual(pending.exports[0].playerId, PLAYER_ID);
+});
+
+test('site mode stands down when the extension has marked the page', async () => {
+  await runPage(gamePage());
+  let pending = 'unset';
+  const html = sitePage().replace('<html>', '<html data-pfg-companion="extension">');
+  await runPage(html, { url: SITE_URL, afterLoad(w) { pending = w.localStorage.getItem('pfg_companion_pending_export'); } });
+  assert.strictEqual(pending, null, 'the extension owns the hand-off');
+});

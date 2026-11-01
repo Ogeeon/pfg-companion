@@ -39,6 +39,7 @@ The script runs in two modes, chosen by `ON_GAME` (hostname ends with `.ogame.ga
 
 - Never change the selected planet, navigate/open game pages, or run background polling loops. Collection happens only on page load or on explicit Refresh.
 - Production factors are read only from the Resource Settings page the player opened themselves.
+- Mark the document at start (`document.documentElement.dataset.pfgCompanion = 'userscript'`) and stand down entirely when it is already marked (the browser extension sets `'extension'`): the two builds never collect together.
 
 ## Conventions
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PfG Companion
 // @namespace    https://proxyforgame.com/
-// @version      0.3.0
+// @version      0.3.1
 // @description  Collect OGame account data while you play and make it available to ProxyForGame.
 // @updateURL    https://proxyforgame.com/companion/pfg-companion.meta.js
 // @downloadURL  https://proxyforgame.com/companion/pfg-companion.user.js
@@ -18,6 +18,12 @@
 
 (function () {
   'use strict';
+
+  // The PfG Companion browser extension and this userscript must not collect together (a second
+  // accountInfo request would mark the player active again): whoever starts first marks the
+  // document and the other stands down entirely.
+  if (document.documentElement.dataset.pfgCompanion) return;
+  document.documentElement.dataset.pfgCompanion = 'userscript';
 
   // Set to true to print collection details to the browser console.
   const DEBUG = false;
