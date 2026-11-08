@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PfG Companion
 // @namespace    https://proxyforgame.com/
-// @version      0.3.1
+// @version      0.3.2
 // @description  Collect OGame account data while you play and make it available to ProxyForGame.
 // @updateURL    https://proxyforgame.com/companion/pfg-companion.meta.js
 // @downloadURL  https://proxyforgame.com/companion/pfg-companion.user.js
@@ -555,6 +555,21 @@
     return { planets, moons };
   }
 
+  /**
+   * The planets' ids in the order the game's planet list shows them: the order the player chose in the game's
+   * options (by emergence, coordinates, name, size or fields, either way round). accountInfo keys its planets by id,
+   * which loses that order. Empty when the page has no planet list.
+   * @returns {number[]}
+   */
+  function planetOrderFromMenu() {
+    const order = [];
+    document.querySelectorAll('#planetList .smallplanet').forEach((node) => {
+      const planetId = (node.id || '').match(/^planet-(\d+)$/)?.[1];
+      if (planetId) order.push(Number(planetId));
+    });
+    return order;
+  }
+
   /** @param {Record<string, any>} target @param {Record<string, any>} details */
   function mergeBodyDetails(target, details) {
     Object.entries(details).forEach(([id, extra]) => {
@@ -579,6 +594,8 @@
     const bonusResponse = stripResponse(speciesBonuses);
     if (bonusResponse?.data) result.speciesBonuses = stripDetails(bonusResponse.data);
     else debug('buildExport: speciesBonuses response has no data, keys=', bonusResponse && typeof bonusResponse === 'object' ? Object.keys(bonusResponse).join(',') : typeof bonusResponse);
+    const planetOrder = planetOrderFromMenu();
+    if (planetOrder.length) result.pfgCompanion = { planetOrder };
     result.schemaVersion = 2;
     result.universe = uni;
     result.exportedAt = new Date().toISOString();
@@ -692,6 +709,8 @@
     if (!next.speciesBonuses && existing.speciesBonuses) next.speciesBonuses = existing.speciesBonuses;
     const hasPlanets = (value) => value && typeof value === 'object' && Object.keys(value).length > 0;
     if (!hasPlanets(next.planets) && hasPlanets(existing.planets)) next.planets = existing.planets;
+    const planetOrder = [exportData.pfgCompanion?.planetOrder, existing.pfgCompanion?.planetOrder].find((order) => Array.isArray(order) && order.length);
+    if (planetOrder) next.pfgCompanion.planetOrder = planetOrder;
     next.pfgCompanion.productionBoosters = productionBoosters(next.planets);
     next.pfgCompanion.resources = mergedResources(next, [existing.pfgCompanion?.resources, exportData.pfgCompanion?.resources], collectedAt);
     next.pfgCompanion.status = collectionStatus(next);
@@ -867,6 +886,26 @@
     next.pfgCompanion ??= {};
     next.pfgCompanion.resources = { ...(next.pfgCompanion.resources || {}), [read.bodyId]: read.reading };
     // exportedAt is left alone: it dates the bodies' own resources, which a bar reading does not touch.
+    persistExport(next, entry.collectedAt, entry.error);
+  }
+
+  /**
+   * Stores the planet list's order when it differs from the stored one: the player re-sorted the list in the game's
+   * options, which needs no new account request. Moves `exportedAt`, as a production-factor save does, because the
+   * site re-imports an export only when it is newer.
+   */
+  function savePlanetOrder() {
+    const order = planetOrderFromMenu();
+    if (!order.length) return;
+    const entry = activeEntry();
+    if (!entry?.export) return;
+    const stored = entry.export.pfgCompanion?.planetOrder;
+    if (Array.isArray(stored) && stored.length === order.length && stored.every((id, i) => id === order[i])) return;
+    debug('savePlanetOrder: planet list order changed to', order);
+    const next = structuredClone(entry.export);
+    next.exportedAt = new Date().toISOString();
+    next.pfgCompanion ??= {};
+    next.pfgCompanion.planetOrder = order;
     persistExport(next, entry.collectedAt, entry.error);
   }
 
@@ -1160,6 +1199,7 @@
     void collectAccount().then(() => {
       debug('collection flow: collectAccount resolved, saving resources and production factors and refreshing UI');
       saveBodyResources(barReading);
+      savePlanetOrder();
       saveProductionFactors();
       refreshGameUi();
       updateOpenPanel();
@@ -1167,6 +1207,7 @@
       debug('collection flow: collectAccount FAILED:', error);
       recordError(error);
       saveBodyResources(barReading);
+      savePlanetOrder();
       refreshGameUi();
       updateOpenPanel();
     });
